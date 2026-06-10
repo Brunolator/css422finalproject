@@ -286,7 +286,37 @@ _rfree
 			; Get the MCB start of the second buddy in the pair
 			ADD		r7, r2, r5
 			LDR		r7, [r7]
-			; TODO: finish coding the if
+			
+			; If the other buddy is occupied, return early
+			MOV		r8, r7
+			AND		r8, #0x1
+			CMP		r8, #0x0
+			BNE		_rfree_return
+			
+			; Round down buddy size to nearest 32
+			LSR		r7, #0x4
+			LSL		r7, #0x4
+			
+			; If the buddies are not the same size, return early
+			CMP		r7, r6
+			BNE		_rfree_return
+			
+			; Now combining the buddies
+			
+			; Reset the other buddy's size to 0 since it is combined
+			LDR		r8, =0x0
+			ADD		r9, r2, r5
+			STR		r8, [r9]
+			
+			; Double my_size and save it into this buddy's size
+			LSL		r6, #0x1
+			STR		r6, [r2]
+			
+			; Recursive call to rfree
+			PUSH	{r2-r12,lr}
+			; The r2 parameter will stay the same
+			BL		_rfree
+			POP		{r2-r12,lr}
 		
 			B		_rfree_return
 		
