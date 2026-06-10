@@ -77,7 +77,7 @@ _kalloc
 		BL		_ralloc
 		POP		{lr}
 		
-		LDR		r0, =HEAP_TOP ; PLACEHOLDER
+		; Return value will already be in r0 from the _ralloc call
 		BX		lr
 		
 ; _kalloc's helper function to recursively allocate memory space
@@ -107,31 +107,86 @@ _ralloc
 		; If the data size is <= than half the heap size
 		; (then it still needs to decrease size to best fit the data)
 		CMP		r1, r9
-		BGT		_after_split_in_half
+		BGT		_data_size_over_half_given_size
 		
-		; Recursive call to ralloc, only using the first half of given
-		; heap portion, and saving the result to heap_addr
-		PUSH	{r2-r12,lr}
-		SUB		r3, r6, #MCB_ENT_SZ
-		BL		_ralloc
-		POP		{r2-r12,lr}
-		MOV		r7, r0
-		
-		; If the recursive call result was invalid (returned 0), then
-		; try with the second buddy and return that result
-		CMP		r7, #0x0
-		BNE		_after_verify_result_valid
-		
-		PUSH	{r2-r12,lr}
-		MOV		r2, r6
-		BL		_ralloc
-		POP		{r2-r12,lr}
-		; The result will already be in r0 because of the recursive call
-		BX		lr
-		
+			; Recursive call to ralloc, only using the first half of given
+			; heap portion, and saving the result to heap_addr
+			PUSH	{r2-r12,lr}
+			SUB		r3, r6, #MCB_ENT_SZ
+			BL		_ralloc
+			POP		{r2-r12,lr}
+			MOV		r7, r0
+			
+			; If the recursive call result was invalid (returned 0), then
+			; try with the second buddy and return that result
+			CMP		r7, #0x0
+			BNE		_after_verify_result_valid
+			
+				PUSH	{r2-r12,lr}
+				MOV		r2, r6
+				BL		_ralloc
+				POP		{r2-r12,lr}
+				; The result will already be in r0 because of the recursive call
+				BX		lr
+			
 _after_verify_result_valid
+			
+			; If the buddy at the midpoint is free, divide it to 2 buddies by
+			; setting the midpoint MCB block to the new buddy size
+			LDR		r10, [r6]
+			AND		r10, #0x1
+			CMP		r10, #0x0
+			BNE		_after_split_in_half
+			
+				STR		r9, [r6]
 		
 _after_split_in_half
+			
+			; Return heap_addr
+			MOV		r0, r7
+			BX		lr
+
+_data_size_over_half_given_size
+		
+		; If this buddy is already allocated, then return 0
+		LDR		r10, [r2]
+		AND		r10, #0x1
+		CMP		r10, #0x0
+		BEQ		_buddy_not_already_allocated
+			
+			LDR		r0, =0x0
+			BX		lr
+		
+_buddy_not_already_allocated
+		
+		; If this buddy smaller than given heap size, return 0 because
+		; it has to match perfectly into left_mcb_addr and right_mcb_addr
+		LDR		r10, [r2]
+		CMP		r10, r8
+		BGE		_buddy_is_correct_size
+		
+			LDR		r0, =0x0
+			BX		lr
+		
+_buddy_is_correct_size
+		
+		; The base case where the memory is allocated
+		
+		; Set left array address to the given heap size and mark allocated
+		MOV		r10, r8
+		ORR		r10, #0x1
+		STR		r10, [r2]
+		
+		; Translate the MCB address into heap address and return it
+		MOV		r0, r2
+		
+		LDR		r10, =MCB_TOP
+		SUB		r0, r0, r10
+		
+		LSL		r0, #0x4
+		
+		LDR		r10, =HEAP_TOP
+		ADD		r0, r10
 		
 		BX		lr
 		
