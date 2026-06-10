@@ -68,6 +68,8 @@ _kalloc
 		; complete your code
 		; return value should be saved into r0
 		
+		; r0 has the size parameter
+		
 		; Set up the parameters to call the helper function
 		MOV		r1, r0			; size
 		LDR		r2, =MCB_TOP	; left_mcb_addr
@@ -81,6 +83,7 @@ _kalloc
 		BX		lr
 		
 ; _kalloc's helper function to recursively allocate memory space
+; returns value in r0
 _ralloc
 		; Parameters:
 		; r1: size
@@ -179,12 +182,9 @@ _buddy_is_correct_size
 		
 		; Translate the MCB address into heap address and return it
 		MOV		r0, r2
-		
 		LDR		r10, =MCB_TOP
 		SUB		r0, r0, r10
-		
 		LSL		r0, #0x4
-		
 		LDR		r10, =HEAP_TOP
 		ADD		r0, r10
 		
@@ -198,7 +198,60 @@ _kfree
 		; complete your code
 		; return value should be saved into r0
 		
+		; r0 has the address parameter
 		
+		; If the address to free is outside heap, exit
+		LDR		r1, =HEAP_TOP
+		CMP		r0, r1
+		BGE		_after_check_top_bound
+		
+		; return null
+		LDR		r0, =0x0
+		BX		lr
+		
+_after_check_top_bound
+
+		LDR		r1, =HEAP_BOT
+		CMP		r0, r1
+		BLE		_after_check_bottom_bound
+		
+		; return null
+		LDR		r0, =0x0
+		BX		lr
+		
+_after_check_bottom_bound
+		
+		; Get the mcb address from the given heap address
+		; This will be the parameter to call the helper function
+		MOV		r2, r0
+		LDR		r3, =HEAP_TOP
+		SUB		r2, r2, r3
+		LSR		r2, #0x4
+		LDR		r3, =MCB_TOP
+		ADD		r2, r2, r3
+		
+		PUSH	{lr}
+		BL		_rfree
+		POP		{lr}
+		
+		; If the memory wasn't freed, _rfree returned 0, so return null now
+		CMP		r1, #0x0
+		BNE		_return_kfree
+		
+		LDR		r0, =0x0
+		
+_return_kfree
+		BX		lr
+
+; _kalloc's helper function to recursively allocate memory space
+; returns value in r1
+_rfree
+		; Parameters:
+		; r2: address
+		
+		; 
+		
+		LDR		r1, =0x0 ; PLACEHOLDER
 		BX		lr
 		
 		END
