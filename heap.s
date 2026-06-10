@@ -33,6 +33,7 @@ _kinit
 		; Prepare to clear the heap
 		LDR 	r0, =HEAP_TOP
 		LDR		r1, =HEAP_BOT
+		ADD		r1, r1, #0x20
 		LDR		r3, =0x0
 		
 _heap_init
@@ -45,6 +46,7 @@ _heap_init
 		; Prepare to clear the MCB
 		LDR		r0, =MCB_TOP
 		LDR		r1, =MCB_BOT
+		ADD		r1, r1, #0x2
 		
 _mcb_init
 		STRB	r3, [r0]		; 0-initialize the memory
@@ -73,7 +75,7 @@ _kalloc
 		; Set up the parameters to call the helper function
 		MOV		r1, r0			; size
 		LDR		r2, =MCB_TOP	; left_mcb_addr
-		LDR		r3, =MCB_BOT	; right_mcb_addr
+		LDR		r3, =MCB_BOT	; right_mcb_addr	
 		
 		PUSH	{lr}
 		BL		_ralloc
@@ -90,20 +92,21 @@ _ralloc
 		; r2: left_mcb_addr
 		; r3: right_mcb_addr
 		
-		; entire_mcb_addr_space
+		; Variables:
+		; r4: entire_mcb_addr_space
 		SUB		r4, r3, r2
 		ADD		r4, r4, #MCB_ENT_SZ
-		; half_mcb_addr_space
+		; r5: half_mcb_addr_space
 		MOV		r5, r4
 		LSR		r5, #0x1
-		; midpoint_mcb_addr
+		; r6: midpoint_mcb_addr
 		ADD		r6, r2, r5
-		; heap_addr
+		; r7: heap_addr
 		LDR		r7, =0x0
-		; act_entire_heap_size
+		; r8: act_entire_heap_size
 		MOV		r8, r4
 		LSL		r8, #0x4
-		; act_half_heap_size
+		; r9: act_half_heap_size
 		MOV		r9, r5
 		LSL		r9, #0x4
 		
@@ -155,23 +158,17 @@ _data_size_over_half_given_size
 		LDR		r10, [r2]
 		AND		r10, #0x1
 		CMP		r10, #0x0
-		BEQ		_buddy_not_already_allocated
-			
-			LDR		r0, =0x0
-			BX		lr
+		BNE		_ralloc_return_0
 		
-_buddy_not_already_allocated
+		; The buddy is not already allocated
 		
 		; If this buddy smaller than given heap size, return 0 because
 		; it has to match perfectly into left_mcb_addr and right_mcb_addr
 		LDR		r10, [r2]
 		CMP		r10, r8
-		BGE		_buddy_is_correct_size
+		BLT		_ralloc_return_0
 		
-			LDR		r0, =0x0
-			BX		lr
-		
-_buddy_is_correct_size
+		; The buddy is the correct size
 		
 		; The base case where the memory is allocated
 		
@@ -188,6 +185,10 @@ _buddy_is_correct_size
 		LDR		r10, =HEAP_TOP
 		ADD		r0, r10
 		
+		BX		lr
+		
+_ralloc_return_0
+		LDR		r0, =0x0
 		BX		lr
 		
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -236,22 +237,112 @@ _after_check_bottom_bound
 		
 		; If the memory wasn't freed, _rfree returned 0, so return null now
 		CMP		r1, #0x0
-		BNE		_return_kfree
+		BNE		_kfree_return
 		
 		LDR		r0, =0x0
 		
-_return_kfree
+_kfree_return
 		BX		lr
 
 ; _kalloc's helper function to recursively allocate memory space
 ; returns value in r1
 _rfree
 		; Parameters:
-		; r2: address
+		; r2: mcb_addr
 		
-		; 
+		; Variables:
+		; r3: mcb_contents
+		LDR		r3, [r2]
+		; r4: mcb_index
+		LDR		r4, =MCB_TOP
+		SUB		r4, r2, r4
+		; r5: mcb_disp
+		LSR		r3, #0x4
+		MOV		r5, r3
+		; r6: my_size
+		LSL		r3, #0x4
+		MOV		r6, r3
 		
-		LDR		r1, =0x0 ; PLACEHOLDER
+		; Store the deallocation bit back into memory
+		STR		r3, [r2]
+		
+		; Divide index by size to get the index of buddies specifically this size
+		; If even, then it's first in its pair, otherwise it's the second
+		UDIV	r7, r4, r5
+		AND		r7, #0x1
+		CMP		r7, #0x0
+		BNE		_is_second_buddy
+		
+			; If gets here, it is the first buddy
+			
+			; If the buddy is past the mcb bottom, return 0
+			ADD		r7, r2, r5
+			LDR		r8, =MCB_BOT
+			CMP		r7, r8
+			BGE		_rfree_return_0
+			
+			; The buddy is within the MCB
+
+			; Get the MCB start of the second buddy in the pair
+			ADD		r7, r2, r5
+			LDR		r7, [r7]
+			; TODO: finish coding the if
+		
+			B		_rfree_return
+		
+_is_second_buddy
+			;MOV		r7, r2
+		
+			; If the buddy is past the mcb bottom, return 0
+			ADD		r7, r2, r5
+			LDR		r8, =MCB_TOP
+			CMP		r7, r8
+			BLT		_rfree_return_0
+			
+			; The buddy is within the MCB
+
+			; r7: mcb_buddy
+			; Get the MCB start of the first buddy in the pair
+			SUB		r7, r2, r5
+			LDR		r7, [r7]
+			
+			; If the other buddy is occupied, return early
+			MOV		r8, r7
+			AND		r8, #0x1
+			CMP		r8, #0x0
+			BNE		_rfree_return
+			
+			; Round down buddy size to nearest 32
+			LSR		r7, #0x4
+			LSL		r7, #0x4
+			
+			; If the buddies are not the same size, return early
+			CMP		r7, r6
+			BNE		_rfree_return
+			
+			; Now combining the buddies
+			
+			; Since it's the second buddy, can remove size data from MCB
+			LDR		r8, =0x0
+			STR		r8, [r2]
+			
+			; Double my_size and save it as the first buddy's size
+			LSL		r6, #0x1
+			SUB		r8, r2, r5
+			STR		r6, [r8]
+			
+			; Recursive call to rfree
+			PUSH	{r2-r12,lr}
+			SUB		r2, r2, r5
+			BL		_rfree
+			POP		{r2-r12,lr}
+
+_rfree_return
+		MOV		r1, r2
+		BX		lr
+
+_rfree_return_0
+		LDR		r1, =0x0
 		BX		lr
 		
 		END

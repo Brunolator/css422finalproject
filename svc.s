@@ -43,7 +43,9 @@ _systemcall_table_jump
 		; complete the rest of the code
 		; your code may be of 4 to 8 lines
 		LDR		r1, [r11, r10]
+		PUSH	{lr}
 		BX		r1
+		POP		{lr}
 		
 		BX		lr				; return to SVC_Handler
 
