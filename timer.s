@@ -60,27 +60,30 @@ _timer_update
 		;;  Implement Your Logic
 		
 		; read SECOND_LEFT
-		LDR	R3, =SECOND_LEFT 
-		LDR 	R0, [R3]
+		LDR		R3, =SECOND_LEFT 
+		LDR		R0, [R3]
 
-		SUBS R0, R0, #1 ; decrement SECOND_LEFT by 1
-		STR R0, [R3] ; Write back the decremented value
+		SUBS	R0, R0, #1 ; decrement SECOND_LEFT by 1
+		STR		R0, [R3] ; Write back the decremented value
 
 		; Branch to timer update done if not 0
-		CMP R0, #0
-		BNE _timer_update_done
+		CMP		R0, #0
+		BNE		_timer_update_done
 
 		; If left is 0
-		LDR R3, =STCTRL
-		MOV R4, #STCTRL_STOP
-		STR R4, [R3]
+		LDR		R3, =STCTRL
+		MOV		R4, #STCTRL_STOP
+		STR		R4, [R3]
 
 		; Invoke a user-provided signal handler
-		MOV	R0, #3
-		MSR	CONTROL, R0
-		LDR	R5, =USR_HANDLER
-		LDR	R6, [R5]
-		BLX	R6
+		MOV		R0, #3
+		MSR		CONTROL, R0
+		LDR		R5, =USR_HANDLER
+		LDR		R6, [R5]
+		PUSH	{lr}
+		BLX		R6
+		POP		{lr}
+		
 _timer_update_done
 		MOV		pc, lr		; return to SysTick_Handler
 
@@ -90,6 +93,19 @@ _timer_update_done
 	    EXPORT	_signal_handler
 _signal_handler
 	;;  Implement Your Logic
+	
+	; Read memory at user handler to r2
+	LDR		r2, =USR_HANDLER
+	LDR		r2, [r2]
+	
+	; If r0 is SIGALRM, save func (r1) to USR_HANDLER in memory
+	LDR		r3, =SIGALRM
+	CMP		r0, r3
+	BNE		_signal_handler_done
+	
+	LDR		r3, =USR_HANDLER
+	STR		r1, [r3]
+	
 _signal_handler_done
 		MOV		r0, r2					; r0 = return value (previous user handler)
 		MOV		pc, lr		; return to Reset_Handler
