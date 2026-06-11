@@ -25,8 +25,8 @@ INVALID		EQU		-1				; an invalid id
 ; void _kinit( )
 ; this routine must be called from Reset_Handler in startup_TM4C129.s
 ; before you invoke main( ) in driver_keil
-		EXPORT	_kinit
-_kinit
+		EXPORT	_heap_init
+_heap_init
 		; you must correctly set the value of each MCB block
 		; complete your code
 		
@@ -36,11 +36,11 @@ _kinit
 		ADD		r1, r1, #0x20
 		LDR		r3, =0x0
 		
-_heap_init
+_heap_clear
 		STRB	r3, [r0]		; 0-initialize the memory
 		ADD		r0, r0, #0x1	; increment address
 		CMP		r0, r1
-		BLT		_heap_init
+		BLT		_heap_clear
 		; done 0-initializing heap
 		
 		; Prepare to clear the MCB
@@ -48,11 +48,11 @@ _heap_init
 		LDR		r1, =MCB_BOT
 		ADD		r1, r1, #0x2
 		
-_mcb_init
+_mcb_clear
 		STRB	r3, [r0]		; 0-initialize the memory
 		ADD		r0, r0, #0x1	; increment address
 		CMP		r0, r1
-		BLT		_mcb_init
+		BLT		_mcb_clear
 		; done 0-initializing mcb
 		
 		; Start the MCB with one buddy the size of the heap

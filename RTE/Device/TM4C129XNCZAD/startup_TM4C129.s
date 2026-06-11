@@ -25,39 +25,34 @@
 ;//-------- <<< Use Configuration Wizard in Context Menu >>> ------------------
 ;*/
 
-
 ; <h> Heap Configuration
 ;   <o>  Heap Size (in Bytes) <0x0-0xFFFFFFFF:8>
 ; </h>
 
-Heap_Size	EQU	0x00005000
+Heap_Size       EQU     0x00005000
+
                 AREA    HEAP, NOINIT, READWRITE, ALIGN=3
 __heap_base
 Heap_Mem        SPACE   Heap_Size
 __heap_limit
 
-
 ; <h> Stack Configuration
 ;   <o> Stack Size (in Bytes) <0x0-0xFFFFFFFF:8>
 ; </h>
 
-;Stack_Size      EQU     0x00000200
+Handler_Stack_Size      EQU     0x00000800
+Thread_Stack_Size		EQU		0x00000800	
 
-;                AREA    STACK, NOINIT, READWRITE, ALIGN=3
-;Stack_Mem       SPACE   Stack_Size
+                AREA    STACK, NOINIT, READWRITE, ALIGN=3
 
-Handler_Stack_Size	EQU	0x00000800
-Thread_Stack_Size	EQU	0x00000800
-				AREA 	STACK, NOINIT, READWRITE, ALIGN=3
-Thread_Stack_Mem	SPACE	Thread_Stack_Size
+Thread_Stack_Mem		SPACE	Thread_Stack_Size
 __initial_user_sp
-Handler_Stack_Mem	SPACE	Handler_Stack_Size
+Handler_Stack_Mem       SPACE   Handler_Stack_Size
 __initial_sp
 
 
                 PRESERVE8
                 THUMB
-
 
 ; Vector Table Mapped to Address 0 at Reset
 
@@ -211,26 +206,31 @@ Reset_Handler   PROC
                 EXPORT  Reset_Handler             [WEAK]
                 IMPORT  SystemInit
                 IMPORT  __main
-				IMPORT  _systemcall_table_init ; added for CSS422 project
-				IMPORT  _kinit ; added for CSS422 project
-				; set up MSP, do not changethe following three lines
-				LDR     R0, =__initial_sp ; thread mode uses MSP
-				MSR     MSP, R0 ; added for CSS422 project
+				IMPORT	_syscall_table_init			; added for the CSS422 final project
+				IMPORT	_heap_init					; added for the CSS422 final project
+				IMPORT	_dma_init					; added for the CSS422 final project
+				IMPORT	_timer_init					; added for the CSS422 final project	
+
+				LDR		R0, =__initial_sp			; thread mode uses MSP
+				MSR		MSP, R0
+
 				ISB
-				
                 LDR     R0, =SystemInit
                 BLX     R0
-				LDR     R0, =_kinit ; added for CSS422 project
-				BLX     R0				; added for CSS422 project
-				LDR     R0, =_systemcall_table_init ; added for CSS422 project
-				BLX     R0				; added for CSS422 project
+				LDR		R0, =_heap_init				; added for the CSS422 final project
+				BLX		R0							; added for the CSS422 final project
+				LDR		R0, =_syscall_table_init	; added for the CSS422 final project
+				BLX		R0							; added for the CSS422 final project
+;				LDR		R0, =_dma_init				; added for the CSS422 final project
+;				BLX		R0							; added for the CSS422 final project
+				LDR		R0, =_timer_init			; added for the CSS422 final project
+				BLX		R0							; added for the CSS422 final project
 				
-				; set up thread stack, do not change any code from here to ENDP
-				LDR     R0, =__initial_user_sp ; added for CSS422 project
-				MSR     PSP, R0 		; added for CSS422 project
-				; change BIT1 of CONTROL register to enable the PSP and MSP setting
-				MOVS    R0, #2		; Set SPSEL bit: the PSP is used in thread mode and MSP is used in handler mode
-				MSR     CONTROL, R0		; Now thread mode uses PSP for user
+				LDR		R0, =__initial_user_sp
+				MSR		PSP, R0
+				MOVS	R0,	#3						; Set SPSEL bit 1, nPriv bit 0
+				MSR		CONTROL, R0					; Now thread mode uses PSP for user
+				
                 LDR     R0, =__main
                 BX      R0
                 ENDP
@@ -264,20 +264,14 @@ UsageFault_Handler\
                 ENDP
 SVC_Handler     PROC
                 EXPORT  SVC_Handler               [WEAK]
-					
-				; add three to four lines of code here to call _systemcall_table_jump
-				IMPORT  _systemcall_table_jump ; added for CSS422 project
-				PUSH	{lr}
-				BL		_systemcall_table_jump
-				POP		{lr}
-				
-				; do not update the following two lines
-                MRS	R1, PSP						; added for CSS422 project
-                STR	R0, [R1]					; added for CSS422 project
-				
-				; add one line of code here to exit SVC_Handler
-				BX		lr
-				
+				IMPORT	_syscall_table_jump		; added for the CSS422 final project
+				STMFD	sp!, {lr}	  			; added for the CSS422 final project (save the exec_return in the stack)
+				LDR		R11, =_syscall_table_jump	; added for the CSS422 final project
+				BLX		R11						; added for the CSS422 final project
+				MRS		R1, PSP					; added for the CSS422 final project
+				STR		R0, [R1]				; added for the CSS422 final project
+				LDMFD	sp!, {pc}				; added for the CSS422 final project (restore the exec_return in PC)
+                B       .
                 ENDP
 DebugMon_Handler\
                 PROC
@@ -292,6 +286,14 @@ PendSV_Handler\
 SysTick_Handler\
                 PROC
                 EXPORT  SysTick_Handler           [WEAK]
+				IMPORT	_timer_update			; added for the CSS422 final project
+				STMFD	sp!, {lr}	  			; added for the CSS422 final project (save the exec_return in the stack)
+				LDR		R11, =_timer_update		; added for the CSS422 final project
+				BLX		R11						; added for the CSS422 final project
+				
+				MRS		R1, PSP					; added for the CSS422 final project
+				STR		R0, [R1]				; added for the CSS422 final project
+				LDMFD	sp!, {pc}				; added for the CSS422 final project (restore the exec_return in PC)
                 B       .
                 ENDP
 
@@ -1027,27 +1029,27 @@ GPIOT_Handler\
 
 ; User Initial Stack & Heap
 
-                ;IF      :DEF:__MICROLIB
+                IF      :DEF:__MICROLIB
 
-                ;EXPORT  __initial_sp
-                ;EXPORT  __heap_base
-                ;EXPORT  __heap_limit
+                EXPORT  __initial_user_sp
+                EXPORT  __heap_base
+                EXPORT  __heap_limit
 
-                ;ELSE
+                ELSE
 
-                ;IMPORT  __use_two_region_memory
+                IMPORT  __use_two_region_memory
                 EXPORT  __user_initial_stackheap
 __user_initial_stackheap
 
-                LDR     R0, =Heap_Mem	; heap base
-				LDR     R1, =(Thread_Stack_Mem + Thread_Stack_Size) ; added for css422; stack base
-                LDR     R2, =(Heap_Mem +  Heap_Size); heap limit
-				LDR     R3, =Thread_Stack_Mem ; added for css422
+                LDR     R0, =  Heap_Mem
+                LDR     R1, =(Thread_Stack_Mem + Thread_Stack_Size)
+                LDR     R2, = (Heap_Mem +  Heap_Size)
+                LDR     R3, = Thread_Stack_Mem
                 BX      LR
 
                 ALIGN
 
-                ;ENDIF
+                ENDIF
 
 
                 END

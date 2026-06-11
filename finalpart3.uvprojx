@@ -404,6 +404,16 @@
               <FileType>2</FileType>
               <FilePath>.\svc.s</FilePath>
             </File>
+            <File>
+              <FileName>dma.s</FileName>
+              <FileType>2</FileType>
+              <FilePath>.\dma.s</FilePath>
+            </File>
+            <File>
+              <FileName>timer.s</FileName>
+              <FileType>2</FileType>
+              <FilePath>.\timer.s</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

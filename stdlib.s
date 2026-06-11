@@ -95,7 +95,7 @@ _malloc
 		PUSH {r1-r12,lr}		
 		
 		; you need to add two lines of code here for part 2 implmentation
-		LDR		r7, =0x1
+		LDR		r7, =0x4
 		SVC		#0x0
 		
 		POP {r1-r12,lr}	
@@ -113,10 +113,30 @@ _free
 		PUSH {r1-r12,lr}		
 		
 		; you need to add two lines of code here for part 2 implmentation
-		LDR		r7, =0x2
+		LDR		r7, =0x5
 		SVC		#0x0
 		
 		POP {r1-r12,lr}	
 		BX		lr
+
+
+		EXPORT	_alarm
+_alarm
+		STMFD	sp!, {r1-r12,lr}
+		MOV		r7, #0x01
+		SVC		#0x0
+		LDMFD	sp!, {r1-r12,lr}
+		
+		MOV		pc, lr
+		
+		
+		EXPORT	_signal
+_signal
+		STMFD	sp!, {r1-r12,lr}
+		MOV		r7, #0x02
+		SVC		#0x0
+		LDMFD	sp!, {r1-r12,lr}
+		
+		MOV		pc, lr
 		
 		END
